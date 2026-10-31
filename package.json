@@ -1,0 +1,20 @@
+{
+  "name": "blur-video-app",
+  "version": "0.1.0",
+  "description": "Application web 100% client-side pour flouter les données sensibles (nom, prénom, email, téléphone, adresse) d'images et de vidéos. Aucune donnée ne quitte le navigateur.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/fra": "^1.0.0",
+    "express": "^5.3.0",
+    "tesseract.js": "^5.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
