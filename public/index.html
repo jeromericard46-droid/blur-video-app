@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blur App — floutage de données sensibles (100 % local)</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>🫣 Blur App</h1>
+  <p class="tagline">Floute automatiquement nom, prénom, e-mail, téléphone et adresse sur une image ou une vidéo.<br>
+  <strong>Tout le traitement se fait dans votre navigateur : aucune donnée ne quitte votre machine.</strong></p>
+</header>
+
+<main>
+  <section class="upload">
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+      <span id="dropLabel">Glissez une image ou une vidéo ici, ou cliquez pour choisir un fichier</span>
+    </label>
+    <div class="controls">
+      <label>Langue OCR
+        <select id="langSelect">
+          <option value="fra+eng" selected>Français + Anglais</option>
+          <option value="fra">Français</option>
+          <option value="eng">Anglais</option>
+        </select>
+      </label>
+      <label>Intensité du flou
+        <input type="range" id="blurAmount" min="4" max="60" value="24">
+        <span id="blurAmountVal">24</span>
+      </label>
+      <label class="check"><input type="checkbox" id="onlySensitive" checked> Flouter uniquement les zones détectées (recommandé)</label>
+    </div>
+    <div class="actions">
+      <button id="analyzeBtn" disabled>Analyser et flouter</button>
+      <button id="downloadBtn" disabled>Télécharger le résultat</button>
+    </div>
+    <div id="progress" class="progress hidden"><div id="progressBar"></div><span id="progressText"></span></div>
+  </section>
+
+  <section class="preview">
+    <div class="pane">
+      <h2>Original</h2>
+      <div class="canvasWrap"><canvas id="srcCanvas"></canvas><video id="srcVideo" playsinline muted hidden></video></div>
+    </div>
+    <div class="pane">
+      <h2>Résultat flouté</h2>
+      <div class="canvasWrap"><canvas id="outCanvas"></canvas></div>
+    </div>
+  </section>
+
+  <section id="findings" class="findings hidden">
+    <h2>Données détectées</h2>
+    <ul id="findingsList"></ul>
+  </section>
+</main>
+
+<footer>
+  <p>Le serveur ne sert que des fichiers statiques et écoute uniquement sur <code>127.0.0.1</code>. L'OCR (Tesseract) et le floutage s'exécutent localement en WebAssembly.</p>
+</footer>
+
+<script src="/vendor/tesseract.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
