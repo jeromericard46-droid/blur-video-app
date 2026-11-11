@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Mistral — Blur App</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>💬 Chat Mistral</h1>
+  <p class="tagline">Assistant via l'API Mistral (<code>mistral-small-latest</code>).<br>
+  La clé <code>MISTRAL_API_KEY</code> reste sur le serveur : elle n'est jamais envoyée au navigateur.
+  <a href="/">← Retour au floutage d'images/vidéos</a></p>
+</header>
+
+<main>
+  <section class="chat">
+    <div id="messages" class="messages" aria-live="polite"></div>
+    <form id="composer" class="composer">
+      <input type="text" id="prompt" placeholder="Écrivez votre message…" autocomplete="off" required>
+      <button type="submit" id="sendBtn">Envoyer</button>
+    </form>
+    <p id="status" class="status"></p>
+  </section>
+</main>
+
+<script type="module" src="js/chat.js"></script>
+</body>
+</html>
