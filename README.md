@@ -4,7 +4,8 @@ Application web qui **floute automatiquement les données sensibles** (nom, pré
 
 ## Confidentialité
 
-- **100 % client-side** : l'OCR (Tesseract.js en WebAssembly) et le floutage s'exécutent dans le navigateur. Aucune image ni vidéo n'est envoyée à un serveur.
+- **100 % client-side** pour le floutage : l'OCR (Tesseract.js en WebAssembly) et le floutage s'exécutent dans le navigateur. Aucune image ni vidéo n'est envoyée à un serveur.
+- **Chat Mistral** (`/chat.html`) : exception à la règle ci-dessus — vos messages sont envoyés à l'API Mistral **via le serveur local**, et la clé `MISTRAL_API_KEY` reste exclusivement côté serveur (elle n'est jamais envoyée au navigateur).
 - Le petit serveur Node fourni ne sert que des fichiers statiques (page + librairies embarquées) et écoute **uniquement sur `127.0.0.1`**.
 - Les modèles de langue (`fra`, `eng`) et le moteur WASM sont servis localement — l'application fonctionne **hors-ligne** une fois les dépendances installées.
 
@@ -14,6 +15,27 @@ Application web qui **floute automatiquement les données sensibles** (nom, pré
 npm install
 npm start
 # ouvrir http://127.0.0.1:3000
+```
+
+## Chat Mistral (`/chat.html`)
+
+Interface de chat minimale qui appelle l'API Mistral avec le **SDK TypeScript officiel** [`@mistralai/mistralai`](https://www.npmjs.com/package/@mistralai/mistralai), modèle **`mistral-small-latest`**.
+
+La clé API ne quitte jamais le serveur : le navigateur appelle uniquement `POST /api/chat`, et c'est `server.js` qui contacte l'API Mistral.
+
+```bash
+npm install
+
+# renseigner la clé (jamais côté client, jamais commitée — .env est ignoré par git)
+echo 'MISTRAL_API_KEY=sk-...' > .env
+
+# lancer (choisissez une des deux commandes)
+node --env-file=.env server.js        # Node >= 20.6, charge .env automatiquement
+# ou, sur tout Node >= 18 :
+MISTRAL_API_KEY=sk-... npm start      # Linux/macOS
+export MISTRAL_API_KEY=sk-... && npm start   # Windows PowerShell
+
+# ouvrir http://127.0.0.1:3000/chat.html
 ```
 
 ## Utilisation

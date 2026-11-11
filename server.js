@@ -1,4 +1,5 @@
 import express from 'express';
+import { Mistral } from '@mistralai/mistralai';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -34,6 +35,60 @@ app.get('/vendor/lang/:lang/:variant/:file', (req, res) => {
   const p = path.join(langDataRoot, lang, variant, file);
   if (!fs.existsSync(p)) return res.status(404).end();
   res.sendFile(p);
+});
+
+const CHAT_MODEL = 'mistral-small-latest';
+const MAX_MESSAGES = 50;
+const MAX_CONTENT_LENGTH = 4000;
+
+let mistralClient = null;
+function getMistral() {
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) return null;
+  if (!mistralClient) {
+    mistralClient = new Mistral({
+      apiKey,
+      ...(process.env.MISTRAL_BASE_URL ? { serverURL: process.env.MISTRAL_BASE_URL } : {})
+    });
+  }
+  return mistralClient;
+}
+
+function validateChatMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  if (messages.length > MAX_MESSAGES) return null;
+  const clean = [];
+  for (const m of messages) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    if (!['system', 'user', 'assistant'].includes(m.role)) return null;
+    if (typeof m.content !== 'string' || !m.content.trim() || m.content.length > MAX_CONTENT_LENGTH) return null;
+    clean.push({ role: m.role, content: m.content });
+  }
+  return clean;
+}
+
+app.use(express.json({ limit: '64kb' }));
+
+app.post('/api/chat', async (req, res) => {
+  const client = getMistral();
+  if (!client) {
+    return res.status(503).json({ error: 'MISTRAL_API_KEY non définie côté serveur.' });
+  }
+  const messages = validateChatMessages(req.body?.messages);
+  if (!messages) {
+    return res.status(400).json({ error: `Champ "messages" invalide (tableau de { role, content }, max ${MAX_MESSAGES} messages, ${MAX_CONTENT_LENGTH} caractères max par message).` });
+  }
+  try {
+    const completion = await client.chat.complete({ model: CHAT_MODEL, messages });
+    const content = completion.choices?.[0]?.message?.content;
+    const reply = typeof content === 'string'
+      ? content
+      : (Array.isArray(content) ? content.map((p) => p?.text ?? '').join('') : '');
+    res.json({ reply, model: completion.model ?? CHAT_MODEL });
+  } catch (err) {
+    console.error('appel Mistral en échec:', err?.message ?? err);
+    res.status(502).json({ error: "Échec de l'appel à l'API Mistral." });
+  }
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
