@@ -49,7 +49,7 @@ export MISTRAL_API_KEY=sk-... && npm start   # Windows PowerShell
 
 1. **OCR** : Tesseract extrait le texte et les coordonnées de chaque mot.
 2. **Détection** (`public/js/sensitive.js`) : des règles (expressions rationnelles FR/INTL) repèrent e-mails, téléphones (`06…`, `+33…`), adresses (`12 rue des Lilas`, `75020 Paris`), mentions « Nom : … », « Prénom : … », « Société/Entreprise/Collectivité/Organisme : … ».
-3. **Floutage** : les zones correspondantes sont floutées sur un `<canvas>` (filtre `blur()`), image par image pour la vidéo, puis ré-encodées via `MediaRecorder` dans le format d'entrée si le navigateur le supporte (MP4/WebM), sinon en WebM.
+3. **Floutage** : les zones correspondantes sont floutées sur un `<canvas>` — via le filtre `blur()` quand le navigateur le supporte, sinon via un repli universel (sous-échantillonnage + lissage) donc **fonctionnel aussi sur Safari < 18**. Pour la vidéo, traitement image par image puis ré-encodage via `MediaRecorder` dans le format d'entrée si le navigateur le supporte (MP4/WebM), sinon en WebM ; **la piste audio de la vidéo d'origine est conservée** dans le fichier de sortie.
 
 ## Limites
 

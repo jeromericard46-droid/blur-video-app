@@ -97,3 +97,19 @@ export function boxesFromWords(words, hits) {
   }
   return boxes;
 }
+
+// Choisit le mime MediaRecorder le plus proche du format d'entree (avec piste audio),
+// en retombant sur webm. `isSupported` est injecte (MediaRecorder.isTypeSupported côté navigateur).
+export function pickVideoMime(inputType, isSupported) {
+  const order = [];
+  if (inputType) {
+    order.push(inputType);
+    if (inputType.startsWith('video/mp4') || inputType.startsWith('video/quicktime')) {
+      order.push('video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=vp09.00.10.08,opus', 'video/mp4');
+    } else if (inputType.startsWith('video/webm')) {
+      order.push('video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
+    }
+  }
+  order.push('video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
+  return order.find((m) => { try { return isSupported(m); } catch { return false; } }) || '';
+}
