@@ -3,7 +3,8 @@ const PHONE_FR = /(?:(?:\+33|0033)\s?[1-9]|0[1-9])(?:[\s.\-]?\d{2}){4}/g;
 const PHONE_INTL = /\+\d{1,3}[\s.\-]?(?:\(\d{1,4}\)[\s.\-]?)?(?:\d[\s.\-]?){5,11}\d/g;
 const ADDRESS_FR = /\b\d{1,5}(?:[\s,]+(?:bis|ter|quater|inquies|[A-Za-zÀ-ÿ-]+)){0,3}\s+(?:rue|avenue|av\.?|boulevard|bd\.?|chemin|impasse|place|allée|allee|quai|passage|route|rue|cours|square|faubourg|sentier)\b[^\n,.;]{0,60}/gi;
 const CP_VILLE = /\b(?:0[1-9]|[1-8]\d|9[0-8])\s?\d{3}\s+[A-ZÀ-Þ][A-Za-zÀ-ÿ' -]{1,40}\b/g;
-const NOM_PRENOM = /\b(?:nom|prénom|prenom)\s*[:\-]\s*[A-ZÀ-Þ][A-Za-zÀ-ÿ'-]*(?:\s+[A-ZÀ-Þ][A-Za-zÀ-ÿ'-]*)*/gi;
+const LABELS = 'nom|prénom|prenom|société|societe|entreprise|collectivité|collectivite|organisme|raison\\s+sociale';
+const LABEL_VALUE = new RegExp(`\\b(?:${LABELS})\\s*[:\\-]\\s*[A-ZÀ-Þ](?:(?!${LABELS}\\b)[^\\n,.;:]){0,60}`, 'gi');
 
 const RULES = [
   { type: 'email', re: EMAIL },
@@ -11,7 +12,7 @@ const RULES = [
   { type: 'telephone', re: PHONE_INTL },
   { type: 'adresse', re: ADDRESS_FR },
   { type: 'adresse', re: CP_VILLE },
-  { type: 'nom', re: NOM_PRENOM }
+  { type: 'nom', re: LABEL_VALUE }
 ];
 
 function normalize(text) {

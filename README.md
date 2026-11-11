@@ -43,17 +43,18 @@ export MISTRAL_API_KEY=sk-... && npm start   # Windows PowerShell
 1. Glissez-déposez une image ou une vidéo.
 2. Choisissez la langue OCR et l'intensité du flou.
 3. Cliquez sur **Analyser et flouter**.
-4. Téléchargez le résultat (PNG pour une image, WebM pour une vidéo).
+4. Téléchargez le résultat : **même format que le fichier chargé** (PNG/JPEG/WebP pour une image, MP4/WebM pour une vidéo) quand le navigateur sait l'encoder ; sinon un repli (ex. WebM) est indiqué sous les boutons. En cas d'échec, le message d'erreur s'affiche dans la barre de progression.
 
 ## Fonctionnement
 
 1. **OCR** : Tesseract extrait le texte et les coordonnées de chaque mot.
-2. **Détection** (`public/js/sensitive.js`) : des règles (expressions rationnelles FR/INTL) repèrent e-mails, téléphones (`06…`, `+33…`), adresses (`12 rue des Lilas`, `75020 Paris`), mentions « Nom : … ».
-3. **Floutage** : les zones correspondantes sont floutées sur un `<canvas>` (filtre `blur()`), image par image pour la vidéo, puis ré-encodées en WebM via `MediaRecorder`.
+2. **Détection** (`public/js/sensitive.js`) : des règles (expressions rationnelles FR/INTL) repèrent e-mails, téléphones (`06…`, `+33…`), adresses (`12 rue des Lilas`, `75020 Paris`), mentions « Nom : … », « Prénom : … », « Société/Entreprise/Collectivité/Organisme : … ».
+3. **Floutage** : les zones correspondantes sont floutées sur un `<canvas>` (filtre `blur()`), image par image pour la vidéo, puis ré-encodées via `MediaRecorder` dans le format d'entrée si le navigateur le supporte (MP4/WebM), sinon en WebM.
 
 ## Limites
 
-- La détection par règles manque les noms/prénoms sans étiquette « Nom : ». Une V2 pourra ajouter un modèle NER local (ex. transformers.js).
+- La détection par règles manque les noms/prénoms sans étiquette « Nom : »/« Société : ». Une V2 pourra ajouter un modèle NER local (ex. transformers.js).
+- Si le navigateur ne sait pas encoder dans le format vidéo d'entrée (ex. MP4 sur Firefox), la sortie passe en WebM avec une note affichée.
 - L'OCR est plus fiable sur des images nettes et bien cadrées.
 
 ## Tests

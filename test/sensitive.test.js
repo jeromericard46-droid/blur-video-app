@@ -24,6 +24,12 @@ test('détecte "Nom : Dupont"', () => {
   assert.ok(hits.some((h) => h.type === 'nom' && /Martin/.test(h.text)));
 });
 
+test('détecte "Société : …" et "Collectivité : …" (nom entreprise/collectivité)', () => {
+  const hits = detectSensitive('Société : Mairie de Test\nCollectivité : Agglo du Grand Test');
+  assert.ok(hits.some((h) => h.type === 'nom' && /Mairie de Test/.test(h.text)));
+  assert.ok(hits.some((h) => h.type === 'nom' && /Agglo du Grand Test/.test(h.text)));
+});
+
 test('ne déclenche rien sur un texte banal', () => {
   const hits = detectSensitive('Bonjour, voici le rapport de réunion de mardi.');
   assert.equal(hits.length, 0);

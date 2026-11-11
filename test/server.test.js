@@ -54,6 +54,8 @@ test('langues servies à l’URL exacte demandée par tesseract.js v5', async ()
     assert.ok(buf.length > 1000, p);
     assert.equal(buf[0], 0x1f, 'fichier gzippé attendu');
     assert.equal(buf[1], 0x8b, 'fichier gzippé attendu');
+    const head = await fetch(`${BASE}/vendor/lang/fra.traineddata.gz`, { method: 'HEAD' });
+    assert.equal(head.status, 200, 'HEAD /vendor/lang/fra.traineddata.gz');
   }
 });
 
