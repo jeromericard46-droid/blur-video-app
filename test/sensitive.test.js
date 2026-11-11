@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectSensitive, mergeOverlaps, collectWords, boxesFromWords, wordMatchesHit } from '../public/js/sensitive.js';
+import { detectSensitive, mergeOverlaps, collectWords, boxesFromWords, wordMatchesHit, pickVideoMime } from '../public/js/sensitive.js';
 
 test('détecte un email', () => {
   const hits = detectSensitive('Contact : jean.dupont@example.fr svp');
@@ -87,4 +87,19 @@ test('wordMatchesHit ignore la casse et la ponctuation, et les mots d’un seul 
   assert.ok(wordMatchesHit('rue', hits));
   assert.ok(!wordMatchesHit('a', hits));
   assert.ok(!wordMatchesHit('', hits));
+});
+
+test('pickVideoMime garde le format d’entrée (avec audio) si supporté', () => {
+  const all = () => true;
+  assert.equal(pickVideoMime('video/mp4', all), 'video/mp4');
+  assert.equal(pickVideoMime('video/webm', all), 'video/webm');
+  assert.equal(pickVideoMime('video/quicktime', all), 'video/quicktime');
+});
+
+test('pickVideoMime retombe sur webm+opus si le format d’entrée n’est pas encodable', () => {
+  const webmOnly = (m) => m.startsWith('video/webm');
+  assert.equal(pickVideoMime('video/mp4', webmOnly), 'video/webm;codecs=vp9,opus');
+  assert.equal(pickVideoMime('', webmOnly), 'video/webm;codecs=vp9,opus');
+  const none = () => false;
+  assert.equal(pickVideoMime('video/mp4', none), '');
 });

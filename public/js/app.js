@@ -1,4 +1,4 @@
-import { detectSensitive, mergeOverlaps, collectWords, boxesFromWords } from './sensitive.js';
+import { detectSensitive, mergeOverlaps, collectWords, boxesFromWords, pickVideoMime } from './sensitive.js';
 
 const fileInput = document.getElementById('fileInput');
 const drop = document.getElementById('drop');
@@ -116,27 +116,52 @@ async function ocrImage(w, canvas) {
   return data;
 }
 
+// Floute une zone. ctx.filter (blur gaussien) n'existe pas sur Safari < 18 :
+// repli universel par sous-échantillonnage + lissage, lisible nullement après.
+function blurArea(ctx, x, y, w, h, amount) {
+  if (w <= 0 || h <= 0) return;
+  if (typeof ctx.filter === 'string') {
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    tmp.getContext('2d').drawImage(ctx.canvas, x, y, w, h, 0, 0, w, h);
+    ctx.save();
+    ctx.filter = `blur(${amount}px)`;
+    ctx.drawImage(tmp, x, y);
+    ctx.restore();
+    return;
+  }
+  let src = document.createElement('canvas');
+  src.width = w; src.height = h;
+  src.getContext('2d').drawImage(ctx.canvas, x, y, w, h, 0, 0, w, h);
+  const k = Math.max(2, Math.round(amount));
+  for (let i = 0; i < 2; i++) {
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.round(src.width / k));
+    small.height = Math.max(1, Math.round(src.height / k));
+    const sctx = small.getContext('2d');
+    sctx.imageSmoothingEnabled = true;
+    sctx.drawImage(src, 0, 0, small.width, small.height);
+    const up = document.createElement('canvas');
+    up.width = src.width; up.height = src.height;
+    const uctx = up.getContext('2d');
+    uctx.imageSmoothingEnabled = true;
+    uctx.drawImage(small, 0, 0, up.width, up.height);
+    src = up;
+  }
+  ctx.drawImage(src, x, y);
+}
+
 function applyBlur(ctx, boxes, amount, full) {
   const { width, height } = ctx.canvas;
   if (full) {
-    ctx.filter = `blur(${amount}px)`;
-    ctx.drawImage(ctx.canvas, 0, 0);
-    ctx.filter = 'none';
+    blurArea(ctx, 0, 0, width, height, amount);
     return;
   }
   for (const b of boxes) {
     const pad = Math.max(6, amount / 2);
     const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad);
     const w = Math.min(width - x, b.w + 2 * pad), h = Math.min(height - y, b.h + 2 * pad);
-    if (w <= 0 || h <= 0) continue;
-    const region = ctx.getImageData(x, y, w, h);
-    const tmp = document.createElement('canvas');
-    tmp.width = w; tmp.height = h;
-    tmp.getContext('2d').putImageData(region, 0, 0);
-    ctx.save();
-    ctx.filter = `blur(${amount}px)`;
-    ctx.drawImage(tmp, x, y);
-    ctx.restore();
+    blurArea(ctx, x, y, w, h, amount);
   }
 }
 
@@ -207,19 +232,7 @@ async function seekTo(video, t) {
   });
 }
 
-function pickVideoMime(inputType) {
-  const order = [];
-  if (inputType) {
-    order.push(inputType);
-    if (inputType.startsWith('video/mp4') || inputType.startsWith('video/quicktime')) {
-      order.push('video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=vp09.00.10.08', 'video/mp4');
-    } else if (inputType.startsWith('video/webm')) {
-      order.push('video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
-    }
-  }
-  order.push('video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
-  return order.find((m) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
-}
+
 
 async function analyzeVideo() {
   const w = await getWorker();
@@ -229,9 +242,15 @@ async function analyzeVideo() {
   const vw = video.videoWidth, vh = video.videoHeight;
   outCanvas.width = vw; outCanvas.height = vh;
   const vctx = outCanvas.getContext('2d');
-  const mime = pickVideoMime(currentFile.type);
+  const mime = pickVideoMime(currentFile.type, (m) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } });
   const recStream = outCanvas.captureStream(30);
-  const rec = new MediaRecorder(recStream, mime ? { mimeType: mime, videoBitsPerSecond: 5_000_000 } : undefined);
+  // Conserver le son : recuperer la piste audio de la video d'origine
+  // (l'element n'est plus « muted » ; on ne lit jamais la video, on la seek frame par frame)
+  try {
+    const media = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null);
+    if (media) for (const t of media.getAudioTracks()) recStream.addTrack(t);
+  } catch (e) { console.warn('piste audio non capturee:', e); }
+  const rec = new MediaRecorder(recStream, mime ? { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 } : undefined);
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   const done = new Promise((res) => { rec.onstop = res; });
