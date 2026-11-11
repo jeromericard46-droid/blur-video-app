@@ -1,4 +1,4 @@
-import { detectSensitive, mergeOverlaps } from './sensitive.js';
+import { detectSensitive, mergeOverlaps, collectWords, boxesFromWords } from './sensitive.js';
 
 const fileInput = document.getElementById('fileInput');
 const drop = document.getElementById('drop');
@@ -113,19 +113,6 @@ function applyBlur(ctx, boxes, amount, full) {
   }
 }
 
-function boxesFromWords(words, hits) {
-  const boxes = [];
-  for (const word of words) {
-    const t = word.text || '';
-    if (!t.trim()) continue;
-    const h = hits.find((x) => t.includes(x.text) || x.text.includes(t));
-    if (h) {
-      boxes.push({ x: word.bbox.x0, y: word.bbox.y0, w: word.bbox.x1 - word.bbox.x0, h: word.bbox.y1 - word.bbox.y0 });
-    }
-  }
-  return boxes;
-}
-
 function renderFindings(hits) {
   findingsList.innerHTML = '';
   if (!hits.length) {
@@ -155,8 +142,7 @@ async function analyzeImage() {
   setProgress(1, 'Analyse terminée');
   const hits = mergeOverlaps(detectSensitive(data.text));
   renderFindings(hits);
-  const words = data.words || [];
-  const boxes = boxesFromWords(words, hits);
+  const boxes = boxesFromWords(collectWords(data), hits);
   outCanvas.width = srcCanvas.width;
   outCanvas.height = srcCanvas.height;
   const ctx = outCanvas.getContext('2d');
@@ -168,10 +154,22 @@ async function analyzeImage() {
   progress.classList.add('hidden');
 }
 
+async function waitMetadata(video) {
+  if (video.readyState >= 1) return;
+  await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
+}
+
+async function seekTo(video, t) {
+  const target = Math.min(t, video.duration - 0.01);
+  if (Math.abs(video.currentTime - target) < 1e-3) return;
+  await new Promise((res, rej) => { video.onseeked = res; video.onerror = rej; video.currentTime = target; });
+}
+
 async function analyzeVideo() {
   const w = await getWorker();
   const video = srcVideo;
-  await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
+  await waitMetadata(video);
+  if (!isFinite(video.duration) || video.duration <= 0) throw new Error('Durée de la vidéo inconnue');
   const vw = video.videoWidth, vh = video.videoHeight;
   outCanvas.width = vw; outCanvas.height = vh;
   const vctx = outCanvas.getContext('2d');
@@ -196,20 +194,13 @@ async function analyzeVideo() {
   rec.start(1000);
   setProgress(0, 'Analyse de la vidéo…');
   while (t < video.duration) {
-    video.currentTime = Math.min(t, video.duration - 0.01);
-    await new Promise((res) => { video.onseeked = res; });
+    await seekTo(video, t);
     vctx.drawImage(video, 0, 0);
     if (analyzed < 40 && Math.abs(t / ocrEvery - Math.round(t / ocrEvery)) < step / 2) {
       probeCtx.drawImage(video, 0, 0);
       const data = await ocrImage(w, probeCanvas);
       const hits = mergeOverlaps(detectSensitive(data.text));
-      for (const word of data.words || []) {
-        const txt = word.text || '';
-        if (!txt.trim()) continue;
-        if (hits.some((h) => txt.includes(h.text) || h.text.includes(txt))) {
-          allBoxes.push({ x: word.bbox.x0, y: word.bbox.y0, w: word.bbox.x1 - word.bbox.x0, h: word.bbox.y1 - word.bbox.y0 });
-        }
-      }
+      allBoxes.push(...boxesFromWords(collectWords(data), hits));
       analyzed++;
       setProgress(t / video.duration, `OCR ${analyzed}/40 — ${Math.round((t / video.duration) * 100)} %`);
     }
