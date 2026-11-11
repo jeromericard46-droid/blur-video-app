@@ -17,6 +17,7 @@ const outCanvas = document.getElementById('outCanvas');
 const srcVideo = document.getElementById('srcVideo');
 const findingsSection = document.getElementById('findings');
 const findingsList = document.getElementById('findingsList');
+const formatNote = document.getElementById('formatNote');
 
 let currentFile = null;
 let currentKind = null; // 'image' | 'video'
@@ -34,8 +35,19 @@ drop.addEventListener('drop', (e) => {
 });
 fileInput.addEventListener('change', () => { if (fileInput.files[0]) selectFile(fileInput.files[0]); });
 
+function setFormatNote(text) {
+  if (!text) {
+    formatNote.classList.add('hidden');
+    formatNote.textContent = '';
+    return;
+  }
+  formatNote.textContent = text;
+  formatNote.classList.remove('hidden');
+}
+
 function selectFile(f) {
   currentFile = f;
+  setFormatNote('');
   currentKind = f.type.startsWith('video/') ? 'video' : 'image';
   dropLabel.textContent = `${f.name} (${(f.size / 1048576).toFixed(1)} Mo) — ${currentKind === 'video' ? 'vidéo' : 'image'}`;
   analyzeBtn.disabled = false;
@@ -72,16 +84,30 @@ function setProgress(p, text) {
 
 async function getWorker() {
   if (worker) return worker;
-  worker = await Tesseract.createWorker(langSelect.value.split('+'), 1, {
-    logger: (m) => {
-      if (m.status === 'recognizing text') setProgress(0.3 + 0.7 * m.progress, `OCR : ${Math.round(m.progress * 100)} %`);
-    },
-    workerPath: '/vendor/worker.min.js',
-    corePath: '/vendor/core',
-    langPath: '/vendor/lang',
-    gzip: true,
-    cacheMethod: 'none'
-  });
+  const langs = langSelect.value.split('+');
+  for (const lang of langs) {
+    const r = await fetch(`/vendor/lang/${lang}.traineddata.gz`, { method: 'HEAD' });
+    if (!r.ok) throw new Error(`Langue « ${lang} » indisponible en local (HTTP ${r.status}) — relancez « npm install »`);
+  }
+  let fail;
+  const failP = new Promise((_, rej) => { fail = rej; });
+  const timeoutP = new Promise((_, rej) => { setTimeout(() => rej(new Error('Chargement du moteur OCR dépassé (90 s)')), 90000); });
+  worker = await Promise.race([
+    Tesseract.createWorker(langs, 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text') setProgress(0.3 + 0.7 * m.progress, `OCR : ${Math.round(m.progress * 100)} %`);
+        else if (m.status) setProgress(0.1, m.status);
+      },
+      errorHandler: (e) => fail(typeof e === 'string' ? e : (e?.message || String(e))),
+      workerPath: '/vendor/worker.min.js',
+      corePath: '/vendor/core',
+      langPath: '/vendor/lang',
+      gzip: true,
+      cacheMethod: 'none'
+    }),
+    failP,
+    timeoutP
+  ]);
   return worker;
 }
 
@@ -102,6 +128,7 @@ function applyBlur(ctx, boxes, amount, full) {
     const pad = Math.max(6, amount / 2);
     const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad);
     const w = Math.min(width - x, b.w + 2 * pad), h = Math.min(height - y, b.h + 2 * pad);
+    if (w <= 0 || h <= 0) continue;
     const region = ctx.getImageData(x, y, w, h);
     const tmp = document.createElement('canvas');
     tmp.width = w; tmp.height = h;
@@ -148,21 +175,50 @@ async function analyzeImage() {
   const ctx = outCanvas.getContext('2d');
   ctx.drawImage(srcCanvas, 0, 0);
   applyBlur(ctx, boxes, Number(blurAmount.value), !onlySensitive.checked);
-  resultBlob = await new Promise((res) => outCanvas.toBlob(res, 'image/png'));
-  resultName = currentFile.name.replace(/\.[^.]+$/, '') + '-floute.png';
+  const IMG_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+  const imgType = IMG_TYPES.includes(currentFile.type) ? currentFile.type : 'image/png';
+  resultBlob = await new Promise((res) => outCanvas.toBlob(res, imgType, 0.92));
+  const imgExt = imgType === 'image/jpeg' ? 'jpg' : imgType === 'image/webp' ? 'webp' : 'png';
+  resultName = currentFile.name.replace(/\.[^.]+$/, '') + '-floute.' + imgExt;
+  setFormatNote(imgType === currentFile.type
+    ? ''
+    : `Format de sortie : ${imgExt.toUpperCase()} (le navigateur ne peut pas encoder en ${currentFile.type || 'ce format'})`);
   downloadBtn.disabled = false;
   progress.classList.add('hidden');
 }
 
 async function waitMetadata(video) {
   if (video.readyState >= 1) return;
-  await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; });
+  await new Promise((res, rej) => {
+    const to = setTimeout(() => rej(new Error('Métadonnées de la vidéo non chargées (15 s)')), 15000);
+    video.onloadedmetadata = () => { clearTimeout(to); res(); };
+    video.onerror = () => { clearTimeout(to); rej(new Error('Lecture de la vidéo impossible')); };
+  });
 }
 
 async function seekTo(video, t) {
   const target = Math.min(t, video.duration - 0.01);
   if (Math.abs(video.currentTime - target) < 1e-3) return;
-  await new Promise((res, rej) => { video.onseeked = res; video.onerror = rej; video.currentTime = target; });
+  await new Promise((res) => {
+    const to = setTimeout(res, 3000); // si le seek bloque, on dessine la frame courante
+    video.onseeked = () => { clearTimeout(to); res(); };
+    video.onerror = () => { clearTimeout(to); res(); };
+    video.currentTime = target;
+  });
+}
+
+function pickVideoMime(inputType) {
+  const order = [];
+  if (inputType) {
+    order.push(inputType);
+    if (inputType.startsWith('video/mp4') || inputType.startsWith('video/quicktime')) {
+      order.push('video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=vp09.00.10.08', 'video/mp4');
+    } else if (inputType.startsWith('video/webm')) {
+      order.push('video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
+    }
+  }
+  order.push('video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm');
+  return order.find((m) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
 }
 
 async function analyzeVideo() {
@@ -173,10 +229,8 @@ async function analyzeVideo() {
   const vw = video.videoWidth, vh = video.videoHeight;
   outCanvas.width = vw; outCanvas.height = vh;
   const vctx = outCanvas.getContext('2d');
-  const recCanvas = document.createElement('canvas');
-  recCanvas.width = vw; recCanvas.height = vh;
-  const recStream = recCanvas.captureStream(30);
-  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  const mime = pickVideoMime(currentFile.type);
+  const recStream = outCanvas.captureStream(30);
   const rec = new MediaRecorder(recStream, mime ? { mimeType: mime, videoBitsPerSecond: 5_000_000 } : undefined);
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -211,7 +265,12 @@ async function analyzeVideo() {
   await done;
   setProgress(1, 'Encodage terminé');
   resultBlob = new Blob(chunks, { type: mime || 'video/webm' });
-  resultName = currentFile.name.replace(/\.[^.]+$/, '') + '-floute.webm';
+  const outExt = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+  resultName = currentFile.name.replace(/\.[^.]+$/, '') + '-floute.' + outExt;
+  const inBase = (currentFile.type || '').split('/')[1] || '';
+  setFormatNote(inBase === outExt
+    ? ''
+    : `Format de sortie : ${outExt.toUpperCase()} (ce navigateur ne sait pas encoder en ${inBase || 'ce format'})`);
   downloadBtn.disabled = false;
   progress.classList.add('hidden');
 }
