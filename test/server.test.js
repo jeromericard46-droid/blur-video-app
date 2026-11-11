@@ -38,19 +38,34 @@ test('assets vendor servis localement (hors-ligne)', async () => {
     '/vendor/worker.min.js',
     '/vendor/core/tesseract-core-lstm.wasm.js',
     '/vendor/core/tesseract-core-lstm.wasm',
-    '/vendor/lang/fra/4.0.0_best_int/fra.traineddata.gz',
-    '/vendor/lang/eng/4.0.0/eng.traineddata.gz'
+    '/vendor/core/tesseract-core-simd-lstm.wasm.js'
   ]) {
     const { status, buf } = await get(p);
     assert.equal(status, 200, p);
     assert.ok(buf.length > 1000, p);
   }
-  const gz = await get('/vendor/lang/fra/4.0.0_best_int/fra.traineddata.gz');
-  assert.equal(gz.buf[0], 0x1f, 'fichier gzippé attendu');
-  assert.equal(gz.buf[1], 0x8b, 'fichier gzippé attendu');
+});
+
+// tesseract.js v5 demande `${langPath}/${lang}.traineddata.gz` (langPath = '/vendor/lang')
+test('langues servies à l’URL exacte demandée par tesseract.js v5', async () => {
+  for (const p of ['/vendor/lang/fra.traineddata.gz', '/vendor/lang/eng.traineddata.gz']) {
+    const { status, buf } = await get(p);
+    assert.equal(status, 200, p);
+    assert.ok(buf.length > 1000, p);
+    assert.equal(buf[0], 0x1f, 'fichier gzippé attendu');
+    assert.equal(buf[1], 0x8b, 'fichier gzippé attendu');
+  }
 });
 
 test('chemin lang invalide rejeté', async () => {
-  const { status } = await get('/vendor/lang/../../../etc/passwd');
-  assert.ok([400, 404].includes(status));
+  for (const p of [
+    '/vendor/lang/../../../etc/passwd',
+    '/vendor/lang/..%2F..%2Fetc%2Fpasswd',
+    '/vendor/lang/passwd.traineddata.gz',
+    '/vendor/lang/fra.traineddata',
+    '/vendor/lang/zzz.traineddata.gz'
+  ]) {
+    const { status } = await get(p);
+    assert.ok([400, 404].includes(status), `${p} -> ${status}`);
+  }
 });

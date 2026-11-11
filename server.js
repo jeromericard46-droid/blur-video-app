@@ -26,15 +26,18 @@ app.get('/vendor/worker.min.js', (req, res) => {
 app.use('/vendor/core', express.static(coreDist));
 
 const langDataRoot = path.join(path.dirname(require.resolve('@tesseract.js-data/fra/package.json')), '..');
-app.get('/vendor/lang/:lang/:variant/:file', (req, res) => {
-  const { lang, variant, file } = req.params;
-  const okLang = /^[a-z]{2,3}$/.test(lang);
-  const okVariant = /^4\.0\.0(_best_int)?$/.test(variant);
-  const okFile = new RegExp(`^${lang}\\.traineddata\\.gz$`).test(file);
-  if (!okLang || !okVariant || !okFile) return res.status(400).end();
-  const p = path.join(langDataRoot, lang, variant, file);
-  if (!fs.existsSync(p)) return res.status(404).end();
-  res.sendFile(p);
+// tesseract.js v5 construit l'URL des langues ainsi : `${langPath}/${lang}.traineddata.gz`
+app.get('/vendor/lang/:file', (req, res) => {
+  const { file } = req.params;
+  const m = /^([a-z]{2,3})\.traineddata(\.gz)?$/.exec(file);
+  if (!m) return res.status(400).end();
+  const [, lang, gz] = m;
+  const name = `${lang}.traineddata${gz || ''}`;
+  for (const variant of ['4.0.0_best_int', '4.0.0']) {
+    const p = path.join(langDataRoot, lang, variant, name);
+    if (p.startsWith(langDataRoot + path.sep) && fs.existsSync(p)) return res.sendFile(p);
+  }
+  return res.status(404).end();
 });
 
 const CHAT_MODEL = 'mistral-small-latest';

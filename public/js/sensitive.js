@@ -56,3 +56,43 @@ export function mergeOverlaps(hits) {
   }
   return out;
 }
+
+// tesseract.js v5 : les mots ne sont pas dans data.words mais dans
+// data.blocks[].paragraphs[].lines[].words[] (chacun avec text et bbox {x0,y0,x1,y1})
+export function collectWords(data) {
+  const words = [];
+  for (const block of data?.blocks || []) {
+    for (const para of block?.paragraphs || []) {
+      for (const line of para?.lines || []) {
+        for (const w of line?.words || []) {
+          if (w && w.text && w.bbox) words.push(w);
+        }
+      }
+    }
+  }
+  return words;
+}
+
+function normalizeWord(s) {
+  return (s || '').toLowerCase().replace(/[^\p{L}\p{N}@.+_-]/gu, '');
+}
+
+export function wordMatchesHit(wordText, hits) {
+  const nt = normalizeWord(wordText);
+  if (nt.length < 2) return false;
+  return hits.some((h) => {
+    const ht = normalizeWord(h.text);
+    return ht.length >= 2 && (ht.includes(nt) || nt.includes(ht));
+  });
+}
+
+export function boxesFromWords(words, hits) {
+  const boxes = [];
+  for (const word of words) {
+    if (!word.text || !word.text.trim()) continue;
+    if (!wordMatchesHit(word.text, hits)) continue;
+    const { x0, y0, x1, y1 } = word.bbox;
+    boxes.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  }
+  return boxes;
+}
